@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html>
+    
+    <head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        
+        <title>Cepheids draft 1.01</title>
+    
+        <style>
+            .inputs {
+                border: 2px outset black;
+                background-color: lightblue;
+                text-align: left;
+                padding: 5px;
+                float:left;
+            }
+            
+            .full-width {
+                display:flex;
+                width:100%;
+                float:left;
+            }
+        
+            /* The Modal (background) */
+            .modal {
+                display: none; /* Hidden by default */
+                position: fixed; /* Stay in place */
+                z-index: 1; /* Sit on top */
+                left: 0;
+                top: 0;
+                width: 100%; /* Full width */
+                height: 100%; /* Full height */
+                overflow: auto; /* Enable scroll if needed */
+                background-color: rgb(0,0,0); /* Fallback color */
+                background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+            }
+
+            /* Modal Content/Box */
+            .modal-content {
+                background-color: #fefefe;
+                margin: 15% auto; /* 15% from the top and centered */
+                padding: 20px;
+                border: 1px solid #888;
+                width: 80%; /* Could be more or less, depending on screen size */
+            }
+
+            /* The Close Button */
+            .close {
+                color: #aaa;
+                float: right;
+                font-size: 28px;
+                font-weight: bold;
+            }
+
+            .close:hover,
+            .close:focus {
+                color: black;
+                text-decoration: none;
+                cursor: pointer;
+            }
+        
+        </style>
+    
+        <!-- Plotly for plotting, MIT license -->
+        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>       
+   
+        <!-- Math.js, Apache 2.0 license -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/7.1.0/math.min.js"></script>  
+        
+        <!-- load coefficients from Pejcha+ 2012 table 4 -->
+        <script src="Pejcha2012_coeffs.js" ></script>
+        
+        <!-- load variable stellarSpectra 
+        <script src="stellarSpectra.js" ></script>-->
+        <!-- load variable extinctionLaws 
+        <script src="extinctionLaws.js" ></script>-->
+    
+    </head>
+
+    <body style="font-family:sans-serif; font-size:15px; width:700px; margin-left:auto; margin-right:auto;">
+
+        <div id="headerPanel" class="full-width">
+            <h3><a href="https://foothill.edu/astronomy/astrosims.html" target=_blank>AstroSims</a> > Cepheid Star Explorer draft 1</h3>
+        </div>
+
+      <div id="controlBar" class="full-width">
+            
+            <div id="continuousControl" class="inputs">
+                Period
+                  <input type="text" id="periodDisplay" size="4" value="Error" readonly="true"> Days<br>
+                  <input id="periodSlider" type ="range" min="1" max="100" step="1" value="Error" oninput="updateDisplay()"> <br> 
+
+                <br><br>
+                
+            </div>
+            
+ 
+          
+            <div id="eyeballDirectView">
+                <center>Eyeball View</center> <br>
+                <canvas id="byEyeDisplay" width="150" height="150"></canvas>
+            </div>  
+        </div>
+    
+        <div id="brightnessPlot" class="full-width" style="width:700px;height:300px;">
+        </div>
+
+    
+        <script>
+      
+            // define variables for period 
+            var period = 10;
+            document.getElementById("periodSlider").value = period;
+            document.getElementById("periodDisplay").value = period;
+            
+            var pi = 3.1415926;
+            console.log(pi); //equal to cout, look at variables
+            var changeSize = [];
+            var changeTemp = [];
+            var phase = times / period;
+
+            //  data for spectra were preloaded
+            //console.log(stellarSpectra)
+            
+            // generate list of log Period values from table 4
+            usePs = [];
+            for (i=0; i < Pejcha2012_coeffs.length; i++) {
+                usePs.push(Pejcha2012_coeffs[i][0]);
+            }
+            console.log('usePs: ', usePs);
+
+            // Initialize wavelength and brightness array
+            var times = [], timeMin = 0, timeMax = 100, brightness = [];
+            for (i=timeMin; i < 10*timeMax+1; i++) {
+                times.push(i / 10);
+                brightness.push(i * period);
+            }
+            console.log(times);
+          
+            // initialize underlying data and the display
+            initializeDisplay();
+            updateDisplay();
+      
+            
+            function initializeDisplay() {
+                //initializeStarGraphics();
+                initializePlot();
+    }
+            
+            function updateDisplay() {
+          
+                period = document.getElementById('periodSlider').value;
+                document.getElementById('periodDisplay').value = period;
+                
+                // Reset wavelength and brightness array
+                //times = []
+                //for (i=timeMin; i < 10*timeMax+1; i++) {
+                //    times.push(i/10);
+                //}
+                
+                // calculate average size
+                var Period = 10, AverageSize, AverageTemp, logp = Math.log10(period / 10);
+                AverageSize = 0.777 + 0.698 * Math.log10(period / 10);
+                //console.log(AverageSize);
+                // calculate average temperature
+                AverageTemp = 0.031 - 0.061 * Math.log10(period /10);
+                //console.log(AverageTemp);
+                // calculate average brightness in annoying magnitude system
+                var Mv = 0.1557, Bv = 3.303, AverageBrightness;
+                AverageBrightness = Mv - 5 * AverageSize -2.5 * Bv * AverageTemp;
+                //console.log(AverageBrightness);
+                // calculate amplitude
+                var A = (13.5 * logp + 2.75) / 100;
+                if (logp < -0.13){
+                    A = 0.01;
+                } else if (logp > 0.24) {
+                    A = 0.06;
+                }
+                console.log(A);
+                
+                // select sub-set of table 4 from Pejcha+ 2012 based on period
+                useP = Math.log10(period / 10);
+                console.log('useP: ', useP);
+                diffs = [];
+                for (i=0; i < usePs.length; i++) {
+                    diffs.push(Math.abs(useP - usePs[i]));
+                }
+                console.log('diffs: ', diffs);
+                closestMatch = Math.min(... diffs);
+                console.log('closest match: ', closestMatch);
+                useRows = [];
+                for (i=0; i < usePs.length; i++) {
+                    if (diffs[i] == closestMatch) useRows.push(i);
+                }
+                console.log('use rows: ', useRows);
+                coefficientsTable = [];
+                for (i=0; i < useRows.length; i++) {
+                    coefficientsTable.push(Pejcha2012_coeffs[useRows[i]]);
+                }
+                console.log('coefficients: ', coefficientsTable);
+                
+                console.log('3rd row, 5th item: ', coefficientsTable[2][4]);
+                
+                // start for-loop stepping through each time
+                brightness = [];
+                Phase = [];
+                t = [];
+                Sp = [];
+                St = [];
+                Magnitude = [];
+                Brightness = [];
+                for (i=timeMin; i <= 10*timeMax; i++) {
+                  // calculate phase for each time
+                  t[i] = i/10;
+                  Phase[i] = t[i]/period;
+                  //console.log('t[i]', t[i]);
+                  //console.log('Period', Period);
+                  // calculate change in size at each phase
+                  Sp[i] = 0;
+                  St[i] = 0;
+                  for (j = 0; j < 20; j++) {
+                      Sp[i] += (coefficientsTable[j][4] * Math.cos(2*pi * (j+1) * Phase[i])) + (coefficientsTable[j][5] * Math.sin(2*pi * (j+1) * Phase[i]));
+                      //console.log('Sp =', Sp[i]);
+                      //console.log('CoefficientsTable', coefficientsTable[j][4]);
+                      //console.log('Cos', Math.cos(2*pi * (j+1) * Phase[i]));
+                      //console.log('Counter', (j+1));
+                      //console.log('Phase', Phase[i]);
+                      
+                      //console.log('Sp =', Sp[i]);
+                      //console.log('CoefficientsTable', coefficientsTable[j][5]);
+                      //console.log('Sin', Math.sin(2*pi * (j+1) * Phase[i]));
+                      //console.log('Cos + Sin', (coefficientsTable[j][4] * Math.cos(2*pi * (j+1) * Phase[i])) + (coefficientsTable[j][5] * Math.sin(2*pi * (j+1) * Phase[i])));
+                      //console.log('Counter', (j+1));
+                      //console.log('Phase', Phase[i]);
+                      // calculate change in temperature at each phase
+                      St[i] += (coefficientsTable[j][2] * Math.cos(2*pi * (j+1) * Phase[i])) + (coefficientsTable[j][3] * Math.sin(2*pi * (j+1) * Phase[i]));
+                      //console.log('St =', St[i]);
+                  }
+                  // calculate change in temperature at each phase
+                  
+                  // calculate brightness at each time in annoying magnitude system
+                  var B = AverageBrightness - (5 * A * Sp[i]) - (2.5 * A * Bv * St[i]);
+                  var p = 2.5, y = 4.8 - B;
+                  Magnitude.push(AverageBrightness - (5 * A * Sp[i]) - (2.5 * A * Bv * St[i]));
+                  //console.log('Magnitude',Magnitude[i]);
+                  // convert brightness at each time to human readable terms
+                  var B = AverageBrightness - (5 * A * Sp[i]) - (2.5 * A * Bv * St[i]);
+                  var p = 2.5, y = 4.8 - B;
+                  //var Brightness = (p ** y);
+                  Brightness.push(p ** y);
+                  //console.log('Brightness',p ** y);
+                  console.log('Brightness = ',Brightness[i]);
+                    brightness.push(i * period);
+                }
+                // end for-loop
+                
+                
+                
+                // make plot
+                //Plotly.react(plotter, [{x: times, y: brightness }], plotLayout );
+                Plotly.react(plotter, [{x: times, y: Brightness }], plotLayout );
+            
+                // make eyeball view
+                //starUpdate();
+                
+            }
+            
+            function initializePlot() {
+                // initialize plot
+                plotter = document.getElementById('brightnessPlot');
+                
+                plotLayout = {
+                    //margin: { t: 30, l:xBase, r:50 },
+                    title: {
+                        text: 'Lightcurve',
+                        font: {
+                                family: 'Calibri, monospace',
+                                size: 22,
+                                color: 'black'
+                        },
+                        x: 0.01,
+                        y: 1
+                    },
+                    xaxis: {
+                        range: [0, 100],
+                        fixedrange: true,
+                        title: {
+                            text: 'time (days)',
+                            font: {
+                                family: 'Calibri, monospace',
+                                size: 18,
+                                color: 'black'
+                            },
+                            standoff: 10
+                        },
+                    },
+                    yaxis: {
+                        title: {
+                            text: 'Brightness',
+                            font: {
+                                family: 'Calibri, monospace',
+                                size: 18,
+                                color: 'black'
+                            }
+                        }
+                    }
+                };
+
+                //Plotly.react( plotter, [{x: wavelengths, y: brightness }], {margin: { t: 0 } } );
+                Plotly.react( plotter, [{x: times, y: brightness }], plotLayout );
+            }
+            
+/*            function initializeStarGraphics() {
+                starCanvas = document.getElementById("byEyeDisplay");
+                starContext = starCanvas.getContext("2d");
+                starCenterX = starCanvas.width / 2;
+                starCenterY = starCanvas.height / 2;
+                radius = 0.9 * starCanvas.width / 2;
+        
+                starContext.beginPath();
+                starContext.arc(starCenterX, starCenterY, radius, 0, 2 * Math.PI, false);
+                starContext.fillStyle = "red";
+                starUpdate();
+                starContext.fill();
+            }
+*/
+                
+/*            function starUpdate() {
+                //console.log("starUpdate activated");
+                
+                var maxBrightness = Math.max(...brightness);  // ... is the spread operator
+                //console.log("max Brightness", maxBrightness);
+
+                var rSum = 0;
+                var gSum = 0;
+                var bSum = 0;
+                var brightSum = 0;
+                
+                //console.log("shiftedWavelengths, brightness", shiftedWavelengths, brightness);
+
+                for (var i = 0; i < shiftedWavelengths.length; i++) {
+                    var newRGB = getLineColor(shiftedWavelengths[i], brightness[i]/maxBrightness);
+                    rSum += newRGB[0];
+                    gSum += newRGB[1];
+                    bSum += newRGB[2];
+                    brightSum += brightness[i]/maxBrightness;
+                }
+                //console.log("rSum, gSum, bSum: ", rSum, gSum, bSum);
+                
+                var brightest = Math.max(rSum, Math.max(gSum, bSum));
+                var r = rSum / brightest * 255 ;
+                var g = gSum / brightest * 255 ;
+                var b = bSum / brightest * 255 ;
+                if (maxBrightness == 0) {
+                    r = 0;
+                    g = 0;
+                    b = 0;
+                }
+                //console.log("r, g, b: ", r, g, b);
+                starContext.fillStyle = "rgb("+r+","+g+","+b+")";            
+                starContext.fill();
+            }        
+*/            
+
+            
+            function getLineColor(lambda, relativeIntensity=1) {
+                // original routine from Andrew Duffy, modified
+                // outputs a value from 0 to 255
+                
+                var redness = 0;
+                if ((lambda >= 400) && (lambda <= 500)) redness = Math.floor(160-160*(lambda-400)/100);
+                if ((lambda >= 558) && (lambda < 590)) redness = Math.floor(255-255*(590-lambda)*(590-lambda)/(32*32));
+                if ((lambda >= 590) && (lambda < 650)) redness = 255;
+                if ((lambda >= 650) && (lambda <= 700)) redness = Math.floor(255-2*(lambda-650));
+                redness = Math.floor(relativeIntensity * redness);
+ 
+                var greenness = 0;
+                if ((lambda > 460) && (lambda < 500)) greenness = Math.floor(255 - 255*(500 - lambda)*(500-lambda)/1600);
+                if ((lambda >= 500) && (lambda <=  570))    greenness = 255;
+                if ((lambda > 570) && (lambda <=  640))    greenness = Math.floor(255-255*(lambda-570)*(lambda-570)/(70*70));
+                greenness = Math.floor(relativeIntensity * greenness);
+
+                var blueness = 0;
+                if ((lambda >= 400) && (lambda < 460)) blueness = 255;
+                if ((lambda >= 460) && (lambda < 550)) blueness = Math.floor(255 - 255*(lambda-460)*(lambda-460)/(90*90));
+                blueness = Math.floor(relativeIntensity * blueness);
+                
+                //console.log("getLineColor: lambda, relativeIntensity, redness, greenness, blueness ", lambda, relativeIntensity, redness, greenness, blueness);
+ 
+                return [redness, greenness, blueness];
+            }
+ 
+            function lineColorToString(RGB) {
+                // converts RGB array of values from 0 to 255 to string format
+                var redness = RGB[0];
+                var redString = redness.toString(16);
+                if (redString.length == 1) redString = "0"+redString;
+                var greenness = RGB[1];
+                var greenString = greenness.toString(16);
+                if (greenString.length == 1) greenString = "0"+greenString;
+                var blueness = RGB[2];
+                var blueString = blueness.toString(16);
+                if (blueString.length == 1) blueString = "0"+blueString;
+                var newlineColor = "#" + redString+greenString+blueString;
+                return newlineColor;
+            }
+          
+            function PlanckFunction(temperature, wavelength) {
+                //  CALCULATE PLANCK FUNCTION at a single wavelength
+                //  outputs W / steradian / m2 / m
+                //  divide by 1e12 to get kW / sr / m2 / nm
+                var h = 6.626e-34; // m2 kg / s
+                var c = 2.997e8; // m/s, speed of light
+                var kb = 1.38e-23; // m2kg /s2 / K  Boltzmann constant
+  
+                return ((2 * h * c*c) / 
+                    Math.pow(wavelength * 1e-9,5) / 
+                    (Math.exp( h*c / (wavelength * 1e-9 * kb * temperature)) - 1));
+            }
+            
+            function updatePlanck(T, lambdas) {
+                var B = [];
+                for (i=0; i < lambdas.length; i++) {
+                    B.push(PlanckFunction(T, lambdas[i]))
+                }
+                return B;
+            }
+
+            function gaussian(xs, height, center, spread) {
+                var ys = [];
+                for (var i = 0; i < xs.length; i++) {
+                    ys.push(height * Math.exp(-1.0 * Math.pow((xs[i] - center),2) / (2 * Math.pow(spread,2))));
+                }
+                //console.log(xs, height, center, spread, ys);
+                return ys;
+            }
+            
+            function indexOfClosestMatch(arr, matchValue) {
+                if (arr.length === 0) {
+                    return -1;
+                }
+                var matchDistance = Math.abs(arr[0]-matchValue);
+                var matchIndex = 0;
+                
+                for (var i = 1; i < arr.length; i++) {
+                    if (Math.abs(arr[i]-matchValue) < matchDistance) {
+                        matchIndex = i;
+                        matchDistance = Math.abs(arr[i]-matchValue);
+                    }
+                }
+                return matchIndex;
+            }
+            
+      
+  </script>
+
+    </body>
+</html>
